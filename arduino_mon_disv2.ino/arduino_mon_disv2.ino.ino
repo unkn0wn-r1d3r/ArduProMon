@@ -11,15 +11,22 @@
 
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
 
+// Define thresholds for highlighting
+#define RAM_THRESHOLD 10000000 // 10 MB
+#define CPU_THRESHOLD 80 // 80%
+
+unsigned long lastUpdateTime = 0; // To track when to update
+const unsigned long updateInterval = 2000; // 2 seconds
+
 void setup() {
   Serial.begin(115200);
   pinMode(TFT_LED, OUTPUT);
   digitalWrite(TFT_LED, HIGH);
 
   tft.begin();
-  tft.setRotation(1);
+  tft.setRotation(3);
   tft.fillScreen(ILI9341_BLACK);
-  displayStandbyText();
+  displayTableHeader();
   Serial.println("READY");
 }
 
@@ -33,85 +40,72 @@ void checkSerial() {
     data.trim();
 
     if (data.length() > 0) {
-      tft.fillScreen(ILI9341_BLACK);
-      displayProcessInfo(data);
+      unsigned long currentTime = millis();
+      if (currentTime - lastUpdateTime >= updateInterval) {
+        tft.fillRect(0, 20, tft.width(), tft.height() - 20, ILI9341_BLACK); // Clear table area
+        updateProcessInfo(data);
+        lastUpdateTime = currentTime; // Update the last update time
+      }
     }
   }
 }
 
-void displayProcessInfo(String data) {
+void displayTableHeader() {
   tft.setTextColor(ILI9341_WHITE);
   tft.setFont(&FreeSansBold12pt7b);
-
-  // Split the data into lines
-  int y = 0;
-  int lineHeight = 16; // Adjust if needed
-  String line = "";
-  int maxWidth = tft.width();
-  int maxHeight = tft.height();
   
-  // Split data into lines
-  for (int i = 0; i < data.length(); i++) {
-    char c = data[i];
-    if (c == '\n') {
-      // Center the line horizontally
-      int textWidth = getTextWidth(line);
-      int x = (maxWidth - textWidth) / 2;
-      
-      tft.setCursor(x, y);
-      tft.println(line);
-      y += lineHeight;
-      
-      line = "";
-      if (y >= maxHeight) {
-        // Clear and reset if the text goes out of bounds
-        tft.fillScreen(ILI9341_BLACK);
-        y = 0;
-      }
+  tft.setCursor(10, 20);
+  tft.print("Program  | RAM  | CPU");
+  tft.drawLine(10, 30, tft.width() - 10, 30, ILI9341_WHITE); // Draw line under header
+}
+
+void updateProcessInfo(String data) {
+  tft.setFont(&FreeSansBold12pt7b);
+  int y = 40;
+  int lineHeight = 16; // Adjust if needed
+
+  // Split data into lines and update
+  int startIndex = 0;
+  while (startIndex < data.length()) {
+    int endIndex = data.indexOf('\n', startIndex);
+    if (endIndex == -1) endIndex = data.length();
+    
+    String line = data.substring(startIndex, endIndex);
+    startIndex = endIndex + 1;
+
+    // Parse line
+    int nameEnd = line.indexOf(' ');
+    String name = line.substring(0, nameEnd);
+    String rest = line.substring(nameEnd + 1);
+    
+    int ramEnd = rest.indexOf(' ');
+    String ram = rest.substring(0, ramEnd);
+    String cpu = rest.substring(ramEnd + 1);
+
+    // Set colors based on thresholds
+    int ramValue = ram.toInt();
+    int cpuValue = cpu.toInt();
+
+    if (ramValue > RAM_THRESHOLD) {
+      tft.setTextColor(ILI9341_RED); // Highlight RAM usage
+    } else if (cpuValue > CPU_THRESHOLD) {
+      tft.setTextColor(ILI9341_YELLOW); // Highlight CPU usage
     } else {
-      line += c;
+      tft.setTextColor(ILI9341_WHITE); // Default color
+    }
+    
+    // Draw the text
+    tft.setCursor(10, y);
+    tft.print(name);
+    tft.setCursor(100, y);
+    tft.print(ram);
+    tft.setCursor(180, y);
+    tft.print(cpu);
+
+    y += lineHeight;
+    if (y >= tft.height()) {
+      y = 40; // Reset position if it goes beyond screen
+      tft.fillRect(0, 40, tft.width(), tft.height() - 40, ILI9341_BLACK); // Clear old text
     }
   }
-  
-  if (line.length() > 0) {
-    // Center the last line horizontally
-    int textWidth = getTextWidth(line);
-    int x = (maxWidth - textWidth) / 2;
-    
-    tft.setCursor(x, y);
-    tft.println(line);
-  }
-}
-
-int getTextWidth(String text) {
-  int16_t x, y;
-  uint16_t w, h;
-  tft.getTextBounds(text.c_str(), 0, 0, &x, &y, &w, &h);
-  return w;
-}
-
-void displayStandbyText() {
-  tft.setTextColor(ILI9341_WHITE);
-  tft.setCursor(0, 0);
-  tft.setRotation(3);
-  tft.setFont(&FreeSansBold18pt7b);
-
-  // Center the text horizontally and vertically
-  String line1 = "Tukzo.com";
-  String line2 = "Scan For Invoice";
-  
-  int line1Width = getTextWidth(line1);
-  int line2Width = getTextWidth(line2);
-  
-  int centerX = tft.width() / 2;
-  int centerY = tft.height() / 2;
-
-  // Calculate vertical position
-  int line1Y = centerY - 30;
-  int line2Y = centerY + 10;
-
-  tft.setCursor(centerX - line1Width / 2, line1Y);
-  tft.println(line1);
-  tft.setCursor(centerX - line2Width / 2, line2Y);
-  tft.println(line2);
 }
