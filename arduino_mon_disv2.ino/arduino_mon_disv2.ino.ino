@@ -55,7 +55,7 @@ void displayTableHeader() {
   tft.setFont(&FreeSansBold12pt7b);
   
   tft.setCursor(10, 20);
-  tft.print("Program    | RAM    | CPU");
+  tft.print("Program| RAM| CPU");
   tft.drawLine(10, 30, tft.width() - 10, 30, ILI9341_WHITE); // Draw line under header
 }
 

@@ -1,7 +1,7 @@
 import sys
 import serial
 import serial.tools.list_ports
-from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QComboBox
+from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QComboBox, QListWidget
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont
 import psutil  # To get process information
@@ -13,10 +13,12 @@ class SerialConnector(QWidget):
         self.serial_port = None
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_process_info)
+        self.processes = []  # To store process info for later use
+        self.view_mode = False  # To track view mode state
 
     def initUI(self):
-        self.setWindowTitle('Serial Port Connector')
-        self.setGeometry(100, 100, 300, 200)
+        self.setWindowTitle('ArduProMon')
+        self.setGeometry(100, 100, 400, 300)
         
         # Layout
         layout = QVBoxLayout()
@@ -36,6 +38,16 @@ class SerialConnector(QWidget):
         self.status_label = QLabel('Status: Disconnected')
         self.status_label.setFont(QFont('Arial', 12))
         layout.addWidget(self.status_label)
+
+        # View processes button
+        self.view_button = QPushButton('View Processes')
+        self.view_button.clicked.connect(self.toggle_view_processes)
+        layout.addWidget(self.view_button)
+        
+        # List widget for processes
+        self.process_list = QListWidget()
+        self.process_list.itemDoubleClicked.connect(self.send_process_info)
+        layout.addWidget(self.process_list)
         
         self.setLayout(layout)
 
@@ -81,7 +93,7 @@ class SerialConnector(QWidget):
             try:
                 name = proc.info['name']
                 ram = proc.info['memory_info'].rss // (1024 * 1024)  # Convert bytes to MB
-                cpu = proc.info['cpu_percent']
+                cpu = proc.info['cpu_percent'] if proc.info['cpu_percent'] > 0 else 0.1  # Avoid showing zero for active processes
                 process_info.append({
                     'name': name,
                     'ram': f"{ram}MB",
@@ -90,6 +102,31 @@ class SerialConnector(QWidget):
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 continue
         return process_info
+
+    def toggle_view_processes(self):
+        if self.view_mode:
+            self.process_list.clear()
+            self.view_button.setText('View Processes')
+            self.view_mode = False
+        else:
+            self.show_processes()
+            self.view_button.setText('Hide Processes')
+            self.view_mode = True
+
+    def show_processes(self):
+        self.process_list.clear()
+        self.processes = self.get_process_info()  # Fetch process info
+        for proc in self.processes:
+            display_text = f"{proc['name']:<20} {proc['ram']:<8} {proc['cpu']:<4}"
+            self.process_list.addItem(display_text)
+
+    def send_process_info(self, item):
+        if self.serial_port and self.serial_port.is_open:
+            index = self.process_list.row(item)
+            if index < len(self.processes):
+                proc = self.processes[index]
+                message = f"{proc['name']:<20} {proc['ram']:<8} {proc['cpu']:<4}"
+                self.serial_port.write((message + '\n').encode())
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
