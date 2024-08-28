@@ -55,7 +55,7 @@ void displayTableHeader() {
   tft.setFont(&FreeSansBold12pt7b);
   
   tft.setCursor(10, 20);
-  tft.print("Program  | RAM  | CPU");
+  tft.print("Program    | RAM    | CPU");
   tft.drawLine(10, 30, tft.width() - 10, 30, ILI9341_WHITE); // Draw line under header
 }
 
@@ -97,9 +97,9 @@ void updateProcessInfo(String data) {
     // Draw the text
     tft.setCursor(10, y);
     tft.print(name);
-    tft.setCursor(100, y);
+    tft.setCursor(150, y);
     tft.print(ram);
-    tft.setCursor(180, y);
+    tft.setCursor(210, y);
     tft.print(cpu);
 
     y += lineHeight;

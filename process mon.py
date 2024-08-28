@@ -1,16 +1,18 @@
 import sys
 import serial
 import serial.tools.list_ports
-import psutil
 from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QComboBox
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont
+import psutil  # To get process information
 
 class SerialConnector(QWidget):
     def __init__(self):
         super().__init__()
         self.initUI()
         self.serial_port = None
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_process_info)
 
     def initUI(self):
         self.setWindowTitle('Serial Port Connector')
@@ -36,11 +38,7 @@ class SerialConnector(QWidget):
         layout.addWidget(self.status_label)
         
         self.setLayout(layout)
-        
-        # Timer to periodically send process info
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.send_process_info)
-        
+
     def refresh_ports(self):
         ports = [p.device for p in serial.tools.list_ports.comports()]
         self.port_selector.clear()
@@ -64,21 +62,34 @@ class SerialConnector(QWidget):
                 self.serial_port = serial.Serial(port, 115200, timeout=1)
                 self.connect_button.setText('Disconnect')
                 self.status_label.setText(f'Status: Connected to {port}')
-                self.timer.start(5000)  # Send process info every 5 seconds
+                self.timer.start(2000)  # Update every 2 seconds
             except Exception as e:
                 self.status_label.setText(f'Error: {str(e)}')
 
-    def send_process_info(self):
+    def update_process_info(self):
         if self.serial_port and self.serial_port.is_open:
             process_info = self.get_process_info()
-            self.serial_port.write(f"INFO:{process_info}\n".encode())
+            if process_info:
+                for info in process_info:
+                    # Format: <Program Name> <RAM Usage> <CPU Usage>
+                    message = f"{info['name']:<20} {info['ram']:<8} {info['cpu']:<4}"
+                    self.serial_port.write((message + '\n').encode())
 
     def get_process_info(self):
-        processes = psutil.process_iter(['pid', 'name', 'memory_info', 'cpu_percent'])
-        info = ""
-        for proc in processes:
-            info += f"{proc.info['name']} PID:{proc.info['pid']} RAM:{proc.info['memory_info'].rss / (1024 * 1024):.2f}MB CPU:{proc.info['cpu_percent']}%\n"
-        return info
+        process_info = []
+        for proc in psutil.process_iter(['name', 'memory_info', 'cpu_percent']):
+            try:
+                name = proc.info['name']
+                ram = proc.info['memory_info'].rss // (1024 * 1024)  # Convert bytes to MB
+                cpu = proc.info['cpu_percent']
+                process_info.append({
+                    'name': name,
+                    'ram': f"{ram}MB",
+                    'cpu': f"{cpu}%"
+                })
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                continue
+        return process_info
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
