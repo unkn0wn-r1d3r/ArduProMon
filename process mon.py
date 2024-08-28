@@ -1,28 +1,68 @@
 import sys
-import psutil
 import serial
-import platform
-import time
+import serial.tools.list_ports
+from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QComboBox
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QFont
 
-def get_process_info():
-    process_info = ""
-    for proc in psutil.process_iter(['name', 'cpu_percent', 'memory_info']):
-        try:
-            process_info += f"{proc.info['name']}: CPU: {proc.info['cpu_percent']}%, RAM: {proc.info['memory_info'].rss / (1024 * 1024):.2f}MB\n"
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            continue
-    return process_info
+class SerialConnector(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.initUI()
+        self.serial_port = None
 
-def main():
-    ser = serial.Serial('COM4', 115200)  # Update with your Arduino serial port
-    while True:
-        os_name = platform.system()
-        process_info = get_process_info()
-        data = f"OS: {os_name}\n{process_info}"
-        print("Sending data to Arduino...")
-        print(data)  # Print data for debugging
-        ser.write((data + "\n").encode())  # Ensure newline at the end of data
-        time.sleep(5)  # Send data every 5 seconds
+    def initUI(self):
+        self.setWindowTitle('Serial Port Connector')
+        self.setGeometry(100, 100, 300, 200)
+        
+        # Layout
+        layout = QVBoxLayout()
+        
+        # Port selection
+        self.port_selector = QComboBox()
+        self.refresh_ports()
+        self.port_selector.currentIndexChanged.connect(self.on_port_selected)
+        layout.addWidget(self.port_selector)
+        
+        # Connection button
+        self.connect_button = QPushButton('Connect')
+        self.connect_button.clicked.connect(self.toggle_connection)
+        layout.addWidget(self.connect_button)
+        
+        # Status label
+        self.status_label = QLabel('Status: Disconnected')
+        self.status_label.setFont(QFont('Arial', 12))
+        layout.addWidget(self.status_label)
+        
+        self.setLayout(layout)
 
-if __name__ == "__main__":
-    main()
+    def refresh_ports(self):
+        ports = [p.device for p in serial.tools.list_ports.comports()]
+        self.port_selector.clear()
+        self.port_selector.addItems(ports)
+
+    def on_port_selected(self):
+        if self.serial_port and self.serial_port.is_open:
+            self.serial_port.close()
+        self.connect_button.setText('Connect')
+        self.status_label.setText('Status: Disconnected')
+
+    def toggle_connection(self):
+        if self.serial_port and self.serial_port.is_open:
+            self.serial_port.close()
+            self.connect_button.setText('Connect')
+            self.status_label.setText('Status: Disconnected')
+        else:
+            port = self.port_selector.currentText()
+            try:
+                self.serial_port = serial.Serial(port, 115200, timeout=1)
+                self.connect_button.setText('Disconnect')
+                self.status_label.setText(f'Status: Connected to {port}')
+            except Exception as e:
+                self.status_label.setText(f'Error: {str(e)}')
+
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    window = SerialConnector()
+    window.show()
+    sys.exit(app.exec())
